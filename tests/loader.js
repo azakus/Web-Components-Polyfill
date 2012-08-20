@@ -4,99 +4,73 @@ module('Loader', {
 		mockXhr.prototype = {
 			status: 200,
 			response: "mock",
-			open: function(inMethod, inUrl) {
+			open: function(inMethod, inUrl, inSync) {
+				this.sync = inSync;
+			},
+			addEventListener: function(inEvent, inFunc) {
+				this.readyState = 4;
+				this.onloadend = inFunc;
 			},
 			send: function(){
+				var f = this.onloadend;
+				if (this.sync) {
+					f();
+				} else {
+					setTimeout(f, 0);
+				}
 			}
 		}
-		this.withMockXhr = function(fn) {
-			this.replacedXHR = XMLHttpRequest;
-			window.XMLHttpRequest = mockXhr;
-			fn.call(this);
-			window.XMLHttpRequest = this.replacedXHR;
+		window.replacedXHR = XMLHttpRequest;
+		window.XMLHttpRequest = mockXhr;
+		this.createComponentsLink = function(url) {
+			var link = document.createElement('link');
+			link.setAttribute("rel", 'components');
+			link.setAttribute("href", url);
+			return link;
 		};
 	},
 	teardown: function() {
+		window.XMLHttpRequest = window.replacedXHR;
 	}
 });
 
-test(".linksToUrls must qualify urls", 4, function() {
-	var links = [];
-	var createComponentsLink = function(href) {
-		var link = document.createElement('link');
-		link.rel = 'components';
-		link.href = href;
-		links.push(link);
-	};
-	//
-	var hrefs = ['monkey', '.', 'http://bear/'];
-	hrefs.forEach(createComponentsLink);
-	//
-	var urls = polyfill.loader.linksToUrls(links);
-	equal(urls.length, 3);
-	//
-	var a = document.createElement('a');
-	for (var i=0; i<3; i++) {
-		a.href = hrefs[i];
-		equal(urls[i], a.href);
-	}
-});
-
-test(".loadDocuments must convert link tags into HTMLDocument instances", 2, function() {
-	var links = [];
-	var createComponentsLink = function(url) {
-		var link = document.createElement('link');
-		link.rel = 'components';
-		link.href = url;
-		links.push(link);
-	};
+asyncTest("loadDocument must convert link tags into HTMLDocument instances", 2, function() {
 	//
 	var urls = ['http://monkey/', 'http://bear/', 'http://fish/'];
-	urls.forEach(createComponentsLink);
+	var links = urls.map(this.createComponentsLink);
 	//
-	var docs;
-	this.withMockXhr(function() {
-		docs = polyfill.loader.loadDocuments(links);
-	});
-	equal(docs.length, 3);
-	//
-	var areHtmlDocs = true;
-	docs.forEach(function(d) {
-		areHtmlDocs = areHtmlDocs && (d instanceof HTMLDocument);
-	});
-	ok(areHtmlDocs);
-});
-
-
-test(".ok must return true for non-error XHR status codes", function() {
-	// NOTE: xhr from file:// on some devices can return weird status codes (0?)
-	ok(polyfill.loader.ok({status: 200}));
-	ok(polyfill.loader.ok({status: 201}));
-	ok(polyfill.loader.ok({status: 202}));
-	ok(polyfill.loader.ok({status: 203}));
-	ok(polyfill.loader.ok({status: 204}));
-	ok(polyfill.loader.ok({status: 205}));
-	ok(polyfill.loader.ok({status: 206}));
-	ok(polyfill.loader.ok({status: 304}));
-	ok(!polyfill.loader.ok({status: 404}));
-	ok(!polyfill.loader.ok({status: 500}));
-});
-
-test('.loadUrl must fetch contents of a file synchronously', 1, function() {
-	var contents = polyfill.loader.loadUrl('resources/char.txt');
-	equal(contents, 'A');
-});
-
-test('end-to-end test', 2, function() {
-	var createComponentsLink = function(url) {
-		var link = document.createElement('link');
-		link.rel = 'components';
-		link.href = url;
-		return link;
+	polyfill.loader.oncomplete = function() {
+		var docs = [];
+		urls.forEach(function(u) {
+			docs.push(polyfill.loader.docs[u]);
+		});
+		equal(docs.length, 3);
+		console.log(polyfill.loader.docs);
+		ok(docs.every(function(d) { return d instanceof HTMLDocument }));
 	};
-	var links = [createComponentsLink('resources/char.txt')];
+	links.forEach(function(l) {
+		polyfill.loader.loadDocument(l, function(){});
+	});
 	//
-	var docs = polyfill.loader.loadDocuments(links);
-	equal(docs.length, 1);
-	equal(docs[0].body.innerHTML, 'A')
+	start();
+});
+
+test("Loader will cache documents", 1, function() {
+	// http://monkey was defined in a previous test
+	ok(polyfill.loader.cached("http://monkey/", function(){}));
+});
+
+
+asyncTest('end-to-end test', 1, function() {
+	var link = this.createComponentsLink('resources/char.txt');
+	document.body.appendChild(link);
+	//
+	window.XMLHttpRequest = window.replacedXHR;
+	polyfill.loader.loadDocument(link, function(){});
+	polyfill.loader.oncomplete = function() {
+		console.log(polyfill.loader.docs);
+		var doc = polyfill.loader.docs[link.href];
+		equal(doc.body.innerHTML, 'A')
+	}
+	start();
 });
