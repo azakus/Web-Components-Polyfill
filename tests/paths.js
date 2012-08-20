@@ -11,7 +11,7 @@ test("Document URL can be obtained from a node", 1, function() {
 	equal(polyfill.path.documentUrlFromNode(document.body), location.toString());
 });
 
-test("Source and Href urls are resolved correctly", function() {
+test("Source and Href urls are resolved correctly", 2, function() {
 	var src = "resources/logo.jpg";
 	var i = document.createElement("img");
 	i.src = src;
@@ -36,12 +36,13 @@ test("URLs are compressed correctly", function() {
 		{ in: "foo/../bar/baz", out: "bar/baz" },
 		{ in: "foo/bar/baz/..", out: "foo/bar" }
 	];
+	expect(urls.length);
 	urls.forEach(function(u){
 		equal(polyfill.path.compressUrl(u.in), u.out);
 	});
 });
 
-test("CSS urls are relativized correctly", function() {
+test("CSS urls are relativized correctly", 1, function() {
 	var src = "resources/logo.jpg";
 	var i = document.createElement("img");
 	i.src = src;
